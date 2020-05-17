@@ -181,11 +181,13 @@ public:
         while (tmp && tmp->next && tmp->next->edge.dstVertex != dstVertex) {
             tmp = tmp->next;
         }
-        if (!tmp)
+        if (!tmp || !tmp->next)
             throw std::invalid_argument("Edge not found");
-        auto after = tmp->next->next;
-        delete tmp->next;
-        tmp->next = after;
+        else {
+            auto after = tmp->next->next;
+            delete tmp->next;
+            tmp->next = after;
+        }
     }
 
     void EditEdge(TVertex srcVertex, TVertex dstVertex, TVertex newDstVertex) {
