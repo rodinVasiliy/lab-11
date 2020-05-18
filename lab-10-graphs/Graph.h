@@ -3,265 +3,247 @@
 #include <algorithm>
 #include <limits>
 #include <stdexcept>
+#include <iostream>
 
-// TVertex, TEdge - легковесные!
-// Graph<Locality*, double>
+// 1)TVertex - some info which store in Vertex
+// 2)TEdge - some info which store in edge
+// 3)TVertex, TEdge - lightweight
 template<typename TVertex, typename TEdge>
 class Graph {
-
 public:
-
     struct Edge {
-        //TVertex srcVertex; // Опционально
-        TVertex dstVertex;
-        TEdge edge;
+        TVertex dstVertex;//where should go
+        TEdge edge;//some info which store in edge
 
-        Edge(TVertex dstVertex, TEdge edge) : dstVertex(dstVertex), edge(edge) {}
+        Edge(const TVertex &dstVertex, const TEdge edge) : dstVertex(dstVertex), edge(edge) {}
     };
 
 private:
-
-    // Если использовать стандартные контейнеры:
-    // std::unordered_map<TVertex, std::list<Edge>>
-    // или
-    // std::unordered_map<TVertex, std::unordered_map<TVertex, std::list<TEdge>>>
-
-    struct EdgesList {
+    struct EdgeNode {//node of list
         Edge edge;
-        EdgesList* next;
+        EdgeNode *next;
 
-        EdgesList(Edge edge, EdgesList* next) : edge(edge), next(next) {}
+        EdgeNode(const Edge &edge) : edge(edge), next(nullptr) {}
+
+        EdgeNode(Edge edge, EdgeNode *next) : edge(edge), next(next) {}
+
     };
 
     struct Vertex {
-        TVertex vertex;
-        EdgesList* edges;
+        TVertex vertex;//info which store in vertex
+        EdgeNode *edges;//list
 
         Vertex() : edges(nullptr) {}
 
-        explicit Vertex(TVertex vertex) : vertex(vertex), edges(nullptr) {}
+        Vertex(const TVertex &vertex) : vertex(vertex), edges(nullptr) {}
+
     };
 
     Vertex *_graph;
     std::size_t _count;
 
-    std::size_t GetVertexIndex(TVertex vertex) const {
-        for (std::size_t i = 0; i < _count; ++i) {
-            if (_graph[i].vertex == vertex) {
-                return i;
-            }
-        }
-        return _count;
-    }
-
 public:
     Graph() : _graph(nullptr), _count(0) {}
 
-    Graph(const Graph &) = delete;
-
-    Graph &operator=(const Graph &) = delete;
-
-    ~Graph() {
-        // Удалить все вершины
-        delete[] _graph;
-    }
-
-    size_t GetVertexIndexOrThrow(TVertex vertex) const {
-        const auto index = GetVertexIndex(vertex);
-        if (index == _count)
-            throw std::invalid_argument("Vertex not found!");
-        return index;
-    }
-
-    [[nodiscard]] std::size_t GetVertexCount() const {
+    std::size_t FindVertexIndex(TVertex vertex) const {
+        for (std::size_t i = 0; i < _count; ++i)if (_graph[i].vertex == vertex)return i;
         return _count;
     }
 
-    TVertex GetVertex(std::size_t index) const {
-        return _graph[index].vertex;
+    std::size_t FindVertexIndexOrThrow(TVertex vertex) const {
+        auto index = FindVertexIndex(vertex);
+        if (index == _count)throw std::invalid_argument("Vertex not found!");
+        return index;
     }
 
-    void AddVertex(TVertex vertex) {
-        const auto index = GetVertexIndex(vertex);
-        if (index != _count)
-            throw std::invalid_argument("Vertex already exists!");
-        auto graph = new Vertex[_count + 1];
-        for (std::size_t i = 0; i < _count; ++i) {
-            graph[i] = _graph[i];
-        }
-        graph[_count] = Vertex(vertex);
+private:
+    //we can store more than one edge between two vertex
+    /*static EdgeNode *getEdges(Graph graph) {
+        return graph->edges;
+    }*/
+
+public:
+    ~Graph() {
+        clear();
+    }
+
+    void clear() {
+        /* for (std::size_t i = 0; i < _count; ++i) {
+             for (std::size_t j = 0; j < getEdgeCount(_graph[i].vertex); ++j) {
+                 this->DeleteEdge(_graph[i].vertex,this->GetEdge(_graph[i].vertex,j).dstVertex,GetEdge(_graph[i].vertex,j).edge);
+             }
+             _graph[i].edges= nullptr;
+         }
+         _count = 0;*/
         delete[] _graph;
-        _graph = graph;
-        ++_count;
+        _graph = nullptr;
+        _count = 0;
     }
 
     void AddEdge(TVertex srcVertex, TVertex dstVertex, TEdge edge) {
-        if (hasThisEdge(srcVertex, dstVertex)) return;
-        const auto srcIndex = GetVertexIndexOrThrow(srcVertex);
-        const auto dstIndex = GetVertexIndexOrThrow(dstVertex);
+        const auto srcIndex = FindVertexIndexOrThrow(srcVertex);
+        //   const auto dstIndex = FindVertexIndexOrThrow(dstVertex);
         Edge e(dstVertex, edge);
-        _graph[srcIndex].edges = new EdgesList(e, _graph[srcIndex].edges);
+        _graph[srcIndex].edges = new EdgeNode(e, _graph[srcIndex].edges);//head insert
     }
 
-    bool hasThisVertex(TVertex vertex) {
-        const auto index = GetVertexIndex(vertex);
-        if (index == _count)
-            return false;
-        return true;
+
+    [[nodiscard]]std::size_t GetVertexCount() const {
+        return _count;
     }
 
-    bool hasThisEdge(TVertex srcVertex, TVertex dstVertex) {
-        const auto srcIndex = GetVertexIndexOrThrow(srcVertex);
-        const auto dstIndex = GetVertexIndexOrThrow(dstVertex);
-        auto tmp = _graph[srcIndex].edges;
-        if (!tmp)
-            return false;
-        if (tmp->edge.dstVertex == dstVertex) {
-            return true;
-        }
-        while (tmp->next && tmp->next->edge.dstVertex != dstVertex) {
+    [[nodiscard]]TVertex GetVertex(std::size_t index) const {
+        return _graph[index].vertex;
+    }
+
+    std::size_t getEdgeCount(TVertex vertex) const {
+        std::size_t size = 0;
+        auto index = FindVertexIndexOrThrow(vertex);
+        auto tmp = _graph[index].edges;
+        while (tmp) {
+            ++size;
             tmp = tmp->next;
         }
-        if (!tmp)
-            return false;
-        return true;
+        return size;
     }
 
-    void DelVertex(TVertex vertex) {
-        const auto srcIndex = GetVertexIndexOrThrow(vertex);
-        {
-            auto tmp = _graph[srcIndex].edges;
-            while (tmp) {
-                tmp = tmp->next;
-                delete _graph[srcIndex].edges;
-                _graph[srcIndex].edges = tmp;
-            }
-        }
-        for (auto i = 0; i < _count; ++i) {
-            if (i == srcIndex)    //(_graph)1 2 /3/  4 5
-                continue;         //(tmp)   1 2 null 4 5
-            auto tmp = _graph[i].edges;
-            if (!tmp)
-                continue;
-            if (tmp->edge.dstVertex == vertex) {
-                _graph[i].edges = _graph[i].edges->next;
-                delete tmp;
-                continue;
-            }
-            while (tmp->next) {
-                if (tmp->next->edge.dstVertex == vertex) {
-                    auto after = tmp->next->next;
-                    delete tmp->next;
-                    tmp->next = after;
-                    break;
-                }
-                tmp = tmp->next;
-            }
-        }
-        auto t = new Vertex[_count - 1];
-        for (auto i = 0; i < srcIndex; ++i)
-            t[i] = _graph[i];
-        for (auto i = srcIndex + 1; i < _count; ++i)
-            t[i - 1] = _graph[i];
-        _graph = t;
-        --_count;
-    }
-
-    void DelEdge(TVertex srcVertex, TVertex dstVertex) {
-        const auto srcIndex = GetVertexIndexOrThrow(srcVertex);
-        const auto dstIndex = GetVertexIndexOrThrow(dstVertex);
-        auto tmp = _graph[srcIndex].edges;
-        if (!tmp)
-            throw std::invalid_argument("Edge not found");
-        if (tmp->edge.dstVertex == dstVertex) {
-            _graph[srcIndex].edges = _graph[srcIndex].edges->next;
-            delete tmp;
-            return;
-        }
-        while (tmp && tmp->next && tmp->next->edge.dstVertex != dstVertex) {
-            tmp = tmp->next;
-        }
-        if (!tmp || !tmp->next)
-            throw std::invalid_argument("Edge not found");
-        else {
-            auto after = tmp->next->next;
-            delete tmp->next;
-            tmp->next = after;
-        }
-    }
-
-    void EditEdge(TVertex srcVertex, TVertex dstVertex, TVertex newDstVertex) {
-        auto tmp = rand() % 7000;
-        DelEdge(srcVertex, dstVertex);
-        AddEdge(srcVertex, newDstVertex, tmp);
-    }
-
-    void EditVertex(TVertex chgVertex, TVertex newVertex) {
-        auto index = GetVertexIndexOrThrow(chgVertex);
-        _graph[index].vertex = newVertex;
-    }
-
-    std::size_t GetEdgeCount(TVertex srcVertex) const {
-        std::size_t count = 0;
-        auto node = _graph[GetVertexIndexOrThrow(srcVertex)].edges;
-        while (node) {
-            ++count;
-            node = node->next;
-        }
-        return count;
-    }
-
-    Edge GetEdge(TVertex srcVertex, std::size_t index) const {
-       // std::size_t count = 0;
-        auto node = _graph[GetVertexIndexOrThrow(srcVertex)].edges;
+    Edge GetEdge(TVertex srcVertex, std::size_t index) const {//?
+        auto node = _graph[FindVertexIndexOrThrow(srcVertex)].edges;
         for (size_t i = 0; i < index; ++i)
             node = node->next;
         return node->edge;
     }
+
+    /*Edge GetEdge(TVertex srcVertex, std::size_t index) {//?
+        auto node = _graph[FindVertexIndexOrThrow(srcVertex)].edges;
+        for (size_t i = 0; i < index; ++i)
+            node = node->next;
+        return node->edge;
+    }*/
+
+
+    void AddVertex(TVertex vertex) {
+        const auto index = FindVertexIndex(vertex);
+        if (index != _count)
+            throw std::invalid_argument("Vertex already exists!");
+        auto graph = new Vertex[_count + 1];
+        for (std::size_t i = 0; i < _count; ++i)graph[i] = _graph[i];
+        graph[index] = vertex;
+        delete[] _graph;
+        ++_count;
+        _graph = graph;
+    }
+
+    void DeleteEdge(TVertex srcVertex, TVertex dstVertex) {
+        const auto srcIndex = FindVertexIndexOrThrow(srcVertex);
+        EdgeNode *edgeNode = _graph[srcIndex].edges;
+        if (!edgeNode)throw "edge not found";
+        if (edgeNode->edge.dstVertex == dstVertex) {
+            _graph[srcIndex].edges = _graph[srcIndex].edges->next;
+            delete edgeNode;
+            return;
+        }
+        while (edgeNode->next && edgeNode->next->edge.dstVertex != dstVertex)edgeNode = edgeNode->next;// 8 9 88 99
+        if (edgeNode->next == nullptr)throw "edge not found";
+        auto tmp = edgeNode->next;
+        edgeNode->next = edgeNode->next->next;
+        delete tmp;
+    }
+
+    void DeleteVertex(TVertex vertex) {
+        const auto index = FindVertexIndexOrThrow(vertex);
+        for (std::size_t i = 0; i < _count; ++i) {
+            if (i != index) {
+                for (std::size_t j = 0; j < getEdgeCount(_graph[i].vertex); ++j) {
+                    auto edge = this->GetEdge(_graph[i].vertex, j);
+                    if (edge.dstVertex == vertex)DeleteEdge(_graph[i].vertex, vertex);
+                }
+            }
+        }
+        auto graph = new Vertex[_count - 1];
+        for (std::size_t i = 0; i < index; ++i) {
+            graph[i] = _graph[i];
+        }
+        for (std::size_t i = index; i < _count - 1; ++i) {
+            graph[i] = _graph[i + 1];
+        }
+        delete[] _graph;
+        --_count;
+        _graph = graph;
+    }
+
+    void EditEdge(TVertex vertex,TVertex dstVertex, TEdge oldEdge, TEdge newEdge) {
+        auto vertexIndex = FindVertexIndexOrThrow(vertex);
+        for (std::size_t i = 0; i < this->getEdgeCount(_graph[vertexIndex].vertex); ++i) {
+            auto EdgeNode = _graph[vertexIndex].edges;
+            if (EdgeNode->edge.edge == oldEdge&&EdgeNode->edge.dstVertex==dstVertex) {
+                EdgeNode->edge.edge = newEdge;
+                return;
+            } else EdgeNode = EdgeNode->next;
+        }
+        throw "Edge not Find";
+    }
+    void EditEdge(TVertex vertex, TVertex OldDstVertex,TEdge oldEdge,TVertex newDstVertex, TEdge newEdge) {
+        auto vertexIndex = FindVertexIndexOrThrow(vertex);
+        auto newDstIndex = FindVertexIndexOrThrow(newDstVertex);
+        for (std::size_t i = 0; i < this->getEdgeCount(_graph[vertexIndex].vertex); ++i) {
+            auto EdgeNode = _graph[vertexIndex].edges;
+            if (EdgeNode->edge.edge == oldEdge&&EdgeNode->edge.dstVertex==OldDstVertex) {
+                EdgeNode->edge.edge = newEdge;
+                EdgeNode->edge.dstVertex = newDstVertex;
+                return;
+            } else EdgeNode = EdgeNode->next;
+        }
+        throw "Edge not Find";
+    }
+
+    void EditVertex(TVertex oldVertex, TVertex newVertex) {
+        auto vertexIndex = FindVertexIndexOrThrow(oldVertex);
+        auto newVertexIndex = FindVertexIndex(newVertex);
+        if(newVertexIndex!=_count)throw"vertex already exist";
+        *oldVertex = *newVertex;
+        return;
+    }
+/* void EditEdge(TVertex srcVertex, TVertex dstVertex, TVertex newDstVertex,TEdge edge) {
+    DeleteEdge(srcVertex, dstVertex);
+     AddEdge(srcVertex, newDstVertex, edge);
+ }
+ void EditEdge(TVertex srcVertex,TVertex dstVertex,TEdge edge){
+     DeleteEdge(srcVertex,dstVertex);
+     AddEdge(srcVertex,dstVertex,edge);
+ }*/
+
+/*void EditVertex(TVertex oldVertex, TVertex newVertex) {
+    auto index = FindVertexIndexOrThrow(oldVertex);
+    _graph[index].vertex = newVertex;
+}*/
+
+/*  bool DelVertex(TVertex vertex) {
+      auto vertexIndex = this->FindVertexIndexOrThrow(vertex);
+              auto graph = new Vertex[_count - 1];
+              for (std::size_t i = 0; i < vertexIndex; ++i) {
+                  graph[i] = _graph[i];
+              }
+              for (std::size_t i = vertexIndex; i < _count - 1; ++i) {
+                  graph[i] = _graph[i + 1];
+              }
+*//*for (auto j = 0; j < _count; ++j) {
+DelEdge(_graph[i].vertex, vertex)
+}*//*
+                delete[] _graph;
+                _graph = graph;
+                --_count;
+                return true;
+            }
+        return false;
+    }
+*/
+
 };
 
 template<typename TVertex, typename TEdge, typename TFunctional>
-void DepthFirstSearch(const Graph<TVertex, TEdge> &graph, TVertex begin, TFunctional f) {
-    const auto n = graph.GetVertexCount();
-    auto visited = new bool[n];
-    auto stack = new std::size_t[n];
-    std::size_t stackSize = 0;
-    for (std::size_t i = 0; i < n; ++i) {
-        visited[i] = false;
-    }
-
-    try {
-        const auto beginIndex = graph.GetVertexIndexOrThrow(begin);
-        stack[stackSize++] = beginIndex;
-        visited[beginIndex] = true;
-
-        while (stackSize > 0) {
-            const auto vertexIndex = stack[--stackSize];
-            const auto vertex = graph.GetVertex(vertexIndex);
-            f(vertex);
-            const auto edgeCount = graph.GetEdgeCount(vertex);
-            for (std::size_t edgeIndex = 0; edgeIndex < edgeCount; ++edgeIndex) {
-                const auto dstIndex = graph.GetVertexIndexOrThrow(graph.GetEdge(vertex, edgeIndex).dstVertex);
-                if (!visited[dstIndex]) {
-                    stack[stackSize++] = dstIndex;
-                    visited[dstIndex] = true;
-                }
-            }
-
-        }
-    }
-    catch (...) {
-        delete[] visited;
-        delete[] stack;
-        throw;
-    }
-    delete[] visited;
-    delete[] stack;
-}
-
-template<typename TVertex, typename TEdge, typename TFunctional>
-void DepthFirstSearchREC(const Graph<TVertex, TEdge>& graph, TVertex begin, bool* used, std::size_t* stack, std::size_t& stackSize,
-    TFunctional f) {
+void dfs(const Graph<TVertex, TEdge> &graph, TVertex begin, bool *used, std::size_t *stack, std::size_t &stackSize,
+         TFunctional f) {
 
     auto beginIndex = graph.FindVertexIndexOrThrow(begin);
     used[beginIndex] = true;
@@ -283,180 +265,183 @@ void DepthFirstSearchREC(const Graph<TVertex, TEdge>& graph, TVertex begin, bool
 }
 
 template<typename TVertex, typename TEdge, typename TFunctional>
-void BreadthFirstSearch(const Graph<TVertex, TEdge> &graph, TVertex begin, TFunctional f) {
-    const auto n = graph.GetVertexCount();
-    auto visited = new bool[n];
-    auto queue = new std::size_t[n];
-    std::size_t push = 0;
-    std::size_t pop = 0;
-    for (std::size_t i = 0; i < n; ++i) {
-        visited[i] = false;
+void DepthFirstSearch(const Graph<TVertex, TEdge> &graph, TVertex begin, TFunctional f) {
+    auto count = graph.GetVertexCount();
+    auto stackSize = 0;
+    auto used = new bool[count];
+    for (std::size_t i = 0; i < count; ++i) {
+        used[i] = false;
     }
-
+    auto stack = new std::size_t[count];
     try {
-        const auto beginIndex = graph.GetVertexIndexOrThrow(begin);
-        queue[push++] = beginIndex;
-        visited[beginIndex] = true;
-
-        while (push != pop) {
-            const auto vertexIndex = queue[pop++];
-            const auto vertex = graph.GetVertex(vertexIndex);
-            f(vertex);
-            const auto edgeCount = graph.GetEdgeCount(vertex);
-            for (std::size_t edgeIndex = 0; edgeIndex < edgeCount; ++edgeIndex) {
-                const auto dstIndex = graph.GetVertexIndexOrThrow(graph.GetEdge(vertex, edgeIndex).dstVertex);
-                if (!visited[dstIndex]) {
-                    queue[push++] = dstIndex;
-                    visited[dstIndex] = true;
+        auto vertexIndex = graph.FindVertexIndexOrThrow(begin);
+        used[vertexIndex] = true;
+        stack[stackSize++] = vertexIndex;
+        while (stackSize > 0) {
+            auto vertexInd = stack[--stackSize];
+            f(graph.GetVertex(vertexInd));
+            auto vertex = graph.GetVertex(vertexInd);
+            for (std::size_t i = 0; i < graph.getEdgeCount(vertex); ++i) {
+                vertexInd = graph.FindVertexIndexOrThrow(graph.GetEdge(vertex, i).dstVertex);
+                if (!used[vertexInd]) {
+                    stack[stackSize++] = vertexInd;
+                    used[vertexInd] = true;
                 }
             }
         }
     }
     catch (...) {
-        delete[] visited;
+        delete[] used;
+        delete[] stack;
+        throw;
+    }
+    delete[] used;
+    delete[] stack;
+}
+
+template<typename TVertex, typename TEdge, typename TFunctional>
+void BreadthFirstSearch(const Graph<TVertex, TEdge> &graph, TVertex begin, TFunctional f) {
+    auto count = graph.GetVertexCount();
+    auto used = new bool[count];
+    auto queueSize = 0;
+    for (std::size_t i = 0; i < count; ++i) {
+        used[i] = false;
+    }
+    auto queue = new std::size_t[count];
+    try {
+        auto beginIndex = graph.FindVertexIndexOrThrow(begin);
+        used[beginIndex] = true;
+        queue[queueSize++] = beginIndex;
+        while (queueSize > 0) {
+            auto vertexIndex = queue[0];
+            for (std::size_t i = 0; i < queueSize - 1; ++i) {
+                queue[i] = queue[i + 1];
+            }
+            --queueSize;
+            auto vertex = graph.GetVertex(vertexIndex);
+            f(vertex);
+            for (std::size_t i = 0; i < graph.getEdgeCount(vertex); ++i) {
+                vertexIndex = graph.FindVertexIndexOrThrow(graph.GetEdge(vertex, i).dstVertex);
+                if (!used[vertexIndex]) {
+                    queue[queueSize++] = vertexIndex;
+                    used[vertexIndex] = true;
+                }
+            }
+        }
+    }
+    catch (...) {
+        delete[] used;
         delete[] queue;
         throw;
     }
-    delete[] visited;
+    delete[] used;
     delete[] queue;
 }
 
-template<typename TEdge>
-struct DefaultEdgeWeight {
-    float operator()(TEdge edge) {
-        return static_cast<float>(edge);
-    }
-};
-
 const auto INFINITY_DISTANCE = std::numeric_limits<float>::infinity();
 
-template<typename TVertex, typename TEdge, typename TEdgeWeight = DefaultEdgeWeight<TEdge>>
-float Dijkstra(const Graph<TVertex, TEdge> &graph,
-               TVertex begin,
-               TVertex end,
-               TVertex *path,
-               std::size_t *pathLength) {
-    const auto n = graph.GetVertexCount();
-    auto d = new float[n];
-    auto u = new bool[n];
-    auto p = new std::size_t[n];
-    for (std::size_t i = 0; i < n; ++i) {
-        d[i] = INFINITY_DISTANCE;
+template<typename TVertex, typename TEdge>
+double Dijkstra(const Graph<TVertex, TEdge> &graph, TVertex begin, TVertex end, TVertex *path, std::size_t *pathLengh) {
+    const auto count = graph.GetVertexCount();
+    auto u = new bool[count];//used
+    auto d = new TEdge[count];//distance
+    auto p = new std::size_t[count];
+    for (std::size_t i = 0; i < count; ++i) {
         u[i] = false;
-        p[i] = n;
+        d[i] = INFINITY_DISTANCE;
+        p[i] = count;
     }
-
     try {
-        const auto beginIndex = graph.GetVertexIndexOrThrow(begin);
+        auto beginIndex = graph.FindVertexIndexOrThrow(begin);
         d[beginIndex] = 0;
-
-        for (std::size_t i = 0; i < n; ++i) {
-            // ЭТАП 1: Выбрать непомеченную вершину с минимальными расстоянием
-            std::size_t selectedIndex = n;
-            float selectedDistance = INFINITY_DISTANCE;
-            for (std::size_t j = 0; j < n; ++j) {
-                if (!u[j] && d[j] < selectedDistance) {
+        for (std::size_t i = 0; i < count; ++i) {// STEP 1: Select an unmarked vertex with minimum distance
+            auto selectDistance = INFINITY_DISTANCE;
+            auto selectedIndex = count;
+            for (std::size_t j = 0; j < count; ++j) {
+                if (!u[j] && d[j] < selectDistance) {
                     selectedIndex = j;
-                    selectedDistance = d[j];
+                    selectDistance = d[j];
                 }
             }
-            if (selectedIndex == n)
-                break;
+            if (selectedIndex == count)break;
             u[selectedIndex] = true;
-
-            // ЭТАП 2: Для всех смежных ребёр выбранной вершины провести релаксацию
-            const auto selectedVertex = graph.GetVertex(selectedIndex);
-            const auto edgeCount = graph.GetEdgeCount(selectedVertex);
-            for (std::size_t j = 0; j < edgeCount; ++j) {
-                const auto edge = graph.GetEdge(selectedVertex, j);
-                const auto dstVertex = edge.dstVertex;
-                const auto dstIndex = graph.GetVertexIndexOrThrow(dstVertex);
-                const auto distance = d[selectedIndex] + TEdgeWeight()(edge.edge);
-                if (distance < d[dstIndex]) {
-                    d[dstIndex] = distance;
+            auto selectedVertex = graph.GetVertex(selectedIndex);
+            auto edgeCount = graph.getEdgeCount(selectedVertex);
+            for (std::size_t j = 0; j < edgeCount; ++j) {//relaxation
+                auto edge = graph.GetEdge(selectedVertex, j);
+                auto dstIndex = graph.FindVertexIndexOrThrow(edge.dstVertex);
+                if (d[selectedIndex] + edge.edge < d[dstIndex]) {
+                    d[dstIndex] = d[selectedIndex] + edge.edge;
                     p[dstIndex] = selectedIndex;
                 }
             }
         }
-
-        const auto endIndex = graph.GetVertexIndexOrThrow(end);
-        const auto distance = d[endIndex];
-        *pathLength = 0;
+        auto endIndex = graph.FindVertexIndexOrThrow(end);
+        double distance = d[endIndex];
+        *pathLengh = 0;
         if (distance != INFINITY_DISTANCE && path != nullptr) {
             auto currentIndex = endIndex;
             while (currentIndex != beginIndex) {
-                path[(*pathLength)++] = graph.GetVertex(currentIndex);
+                path[(*pathLengh)++] = graph.GetVertex(currentIndex);
                 currentIndex = p[currentIndex];
             }
-            path[(*pathLength)++] = begin;
-            std::reverse(path, path + *pathLength);
+            path[(*pathLengh)++] = begin;
+            std::reverse(path, path + *pathLengh);
         }
-        delete[] d;
         delete[] u;
         delete[] p;
+        delete[] d;
         return distance;
     }
     catch (...) {
-        delete[] d;
         delete[] u;
         delete[] p;
+        delete[] d;
         throw;
     }
 }
 
-template<typename TVertex, typename TEdge, typename TEdgeWeight = DefaultEdgeWeight<TEdge>>
-float BellmanFord(const Graph<TVertex, TEdge> &graph,
-                  TVertex begin,
-                  TVertex end,
-                  TVertex *path,
-                  std::size_t *pathLength) {
-    const auto n = graph.GetVertexCount();
-    auto d = new float[n];
-    auto p = new std::size_t[n];
-    for (std::size_t i = 0; i < n; ++i) {
+template<typename TVertex, typename TEdge>
+double
+BellmanFord(const Graph<TVertex, TEdge> &graph, TVertex begin, TVertex end, TVertex *path, std::size_t *pathLengh) {
+    const auto count = graph.GetVertexCount();
+    auto d = new double[count];//distance
+    auto p = new std::size_t[count];
+    for (std::size_t i = 0; i < count; ++i) {
         d[i] = INFINITY_DISTANCE;
-        p[i] = n;
+        p[i] = count;
     }
-
     try {
-        const auto beginIndex = graph.GetVertexIndexOrThrow(begin);
+        auto beginIndex = graph.FindVertexIndexOrThrow(begin);
         d[beginIndex] = 0;
-
-        for (std::size_t i = 0; i < n - 1; ++i) {
-            // Перебираем все рёбра!
-            // Так как граф представлен списком смежности, нам нужно два цикла:
-            // сначала перебираем все вершины, а уже для каждой вершины перебираем все рёбра.
-            for (std::size_t vertexIndex = 0; vertexIndex < n; ++vertexIndex) {
-                const auto vertex = graph.GetVertex(vertexIndex);
-                const auto edgeCount = graph.GetEdgeCount(vertex);
+        for (std::size_t i = 0; i < count - 1; ++i) {
+            for (std::size_t vertexIndex = 0; vertexIndex < count; ++vertexIndex) {
+                auto vertex = graph.GetVertex(vertexIndex);
+                auto edgeCount = graph.getEdgeCount(vertex);
                 for (std::size_t edgeIndex = 0; edgeIndex < edgeCount; ++edgeIndex) {
-                    const auto edge = graph.GetEdge(vertex, edgeIndex);
-                    const auto dstVertex = edge.dstVertex;
-                    const auto dstIndex = graph.GetVertexIndexOrThrow(dstVertex);
-                    const auto distance = d[vertexIndex] + TEdgeWeight()(edge.edge);
-                    if (distance < d[dstIndex]) {
-                        d[dstIndex] = distance;
+                    auto edge = graph.GetEdge(vertex, edgeIndex);
+                    auto dstIndex = graph.FindVertexIndexOrThrow(edge.dstVertex);
+                    if (edge.edge + d[vertexIndex] < d[dstIndex]) {
+                        d[dstIndex] = edge.edge + d[vertexIndex];
                         p[dstIndex] = vertexIndex;
-
                     }
                 }
             }
         }
-
-        const auto endIndex = graph.GetVertexIndexOrThrow(end);
-        const auto distance = d[endIndex];
-        *pathLength = 0;
+        auto endIndex = graph.FindVertexIndexOrThrow(end);
+        double distance = d[endIndex];
+        *pathLengh = 0;
         if (distance != INFINITY_DISTANCE && path != nullptr) {
             auto currentIndex = endIndex;
             while (currentIndex != beginIndex) {
-                path[(*pathLength)++] = graph.GetVertex(currentIndex);
+                path[(*pathLengh)++] = graph.GetVertex(currentIndex);
                 currentIndex = p[currentIndex];
             }
-            path[(*pathLength)++] = begin;
-            std::reverse(path, path + *pathLength);
+            path[(*pathLengh)++] = begin;
+            std::reverse(path, path + *pathLengh);
         }
-        delete[] d;
         delete[] p;
+        delete[] d;
         return distance;
     }
     catch (...) {
@@ -464,4 +449,6 @@ float BellmanFord(const Graph<TVertex, TEdge> &graph,
         delete[] p;
         throw;
     }
+
 }
+
